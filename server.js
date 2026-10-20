@@ -13,6 +13,7 @@ const { notFoundHandler, globalErrorHandler } = require('./middleware/errorHandl
 
 const authRoutes = require('./routes/authRoutes');
 const taskRoutes = require('./routes/taskRoutes');
+const groupRoutes = require('./routes/groupRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 
 const app = express();
@@ -55,12 +56,14 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 // ─── 4. GÜVENLİ GÜNLÜKLEME VE ORAN SINIRLAMA ──────────────────────────────────
 app.use(requestLogger);
 app.use('/tasks', generalLimiter);
+app.use('/groups', generalLimiter);
 
 // ─── 5. API ROTALARI ──────────────────────────────────────────────────────────
 app.use('/health', healthRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/auth', authRoutes);
 app.use('/tasks', taskRoutes);
+app.use('/groups', groupRoutes);
 
 // Frontend Statik Dosyaları Sunma
 const path = require('path');

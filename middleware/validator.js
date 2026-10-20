@@ -98,7 +98,7 @@ function validateForgotPassword(req, res, next) {
 }
 
 function validateTaskCreate(req, res, next) {
-    const { title, description, priority, date, status, category } = req.body;
+    const { title, description, priority, date, status, category, group_id, groupId, created_by_name, assigned_to } = req.body;
 
     const cleanTitle = sanitizeString(title, 100);
     if (!cleanTitle || cleanTitle.length === 0) {
@@ -109,6 +109,7 @@ function validateTaskCreate(req, res, next) {
     const cleanPriority = VALID_PRIORITIES.includes(priority) ? priority : 'medium';
     const cleanStatus = VALID_STATUSES.includes(status) ? status : 'pending';
     const cleanCategory = normalizeCategory(category);
+    const targetGroupId = group_id || groupId || null;
 
     if (date && !isValidDate(date)) {
         return ApiResponse.error(res, 'Geçersiz tarih formatı (YYYY-AA-GG olmalı).', 'INVALID_DATE', 400);
@@ -120,6 +121,9 @@ function validateTaskCreate(req, res, next) {
         priority: cleanPriority,
         status: cleanStatus,
         category: cleanCategory,
+        group_id: targetGroupId,
+        created_by_name: created_by_name ? sanitizeString(created_by_name, 50) : null,
+        assigned_to: assigned_to || null,
         date: date || null
     };
 
@@ -127,7 +131,7 @@ function validateTaskCreate(req, res, next) {
 }
 
 function validateTaskUpdate(req, res, next) {
-    const { title, description, priority, date, status, category } = req.body;
+    const { title, description, priority, date, status, category, assigned_to } = req.body;
     const updates = {};
 
     if (title !== undefined) {
@@ -158,6 +162,10 @@ function validateTaskUpdate(req, res, next) {
 
     if (category !== undefined) {
         updates.category = normalizeCategory(category);
+    }
+
+    if (assigned_to !== undefined) {
+        updates.assigned_to = assigned_to || null;
     }
 
     if (date !== undefined) {
