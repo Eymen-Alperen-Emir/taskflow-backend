@@ -65,6 +65,15 @@ class AuthController {
 
             if (error || !data || !data.session) {
                 logError('login:failed', error || new Error('Oturum açılamadı'));
+                const errMsg = error ? error.message.toLowerCase() : '';
+                if (errMsg.includes('email not confirmed') || errMsg.includes('email_not_confirmed')) {
+                    return ApiResponse.error(
+                        res,
+                        'Hesabınız oluşturulmuş ancak e-posta adresiniz henüz onaylanmamış. Lütfen gelen kutunuzu (ve spam klasörünü) kontrol edip onay linkine tıklayın.',
+                        'EMAIL_NOT_CONFIRMED',
+                        400
+                    );
+                }
                 return ApiResponse.error(res, 'E-posta veya şifre hatalı.', 'INVALID_CREDENTIALS', 401);
             }
 
