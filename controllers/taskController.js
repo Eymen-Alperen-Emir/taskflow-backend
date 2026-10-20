@@ -2,9 +2,12 @@
  * CONTROLLERS/TASKCONTROLLER.JS — Görev Yönetimi İş Mantığı
  */
 
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const ApiResponse = require('../utils/apiResponse');
 const { logError } = require('../middleware/logger');
+
+// Güvenli veritabanı istemcisi (Service Role ile RLS engellerini aşar)
+const db = supabaseAdmin || supabase;
 
 class TaskController {
     /**
@@ -321,7 +324,7 @@ class TaskController {
             const userId = req.user.id;
             const { groupId } = req.query;
 
-            let query = supabase.from('tasks').select('status');
+            let query = db.from('tasks').select('status');
 
             if (groupId && groupId !== 'all' && groupId !== 'personal') {
                 query = query.eq('group_id', groupId);

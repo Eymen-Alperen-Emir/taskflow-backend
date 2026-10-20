@@ -8,6 +8,9 @@ const ApiResponse = require('../utils/apiResponse');
 const { logError } = require('../middleware/logger');
 const { sanitizeString } = require('../utils/sanitizer');
 
+// Güvenli veritabanı istemcisi (Varsa Service Role ile RLS engellerini aşar)
+const db = supabaseAdmin || supabase;
+
 class GroupController {
     /**
      * Rastgele 6 haneli benzersiz davet kodu üretici (Örn: GRP-7K9A)
@@ -79,7 +82,7 @@ class GroupController {
             if (memberErr) {
                 logError('createGroup:member', memberErr);
                 // Geri alma
-                await supabase.from('groups').delete().eq('id', newGroup.id);
+                await db.from('groups').delete().eq('id', newGroup.id);
                 return ApiResponse.error(res, 'Grup üyeliği başlatılamadı.', 'GROUP_MEMBER_FAILED', 500);
             }
 
@@ -339,7 +342,7 @@ class GroupController {
 
             if (allMembers && allMembers.length <= 1) {
                 // Gruptaki son kişi çıkıyorsa grubu ve görevlerini tamamen sil
-                await supabase.from('groups').delete().eq('id', id);
+                await db.from('groups').delete().eq('id', id);
                 return ApiResponse.success(res, null, 'Gruptan ayrıldınız. Grupta kimse kalmadığı için grup kapatıldı.');
             }
 
