@@ -26,7 +26,7 @@ app.use(helmet({
             scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            connectSrc: ["'self'", "http://localhost:5000", "http://127.0.0.1:5000", config.SUPABASE_URL],
+            connectSrc: ["'self'", "http://localhost:5000", "http://127.0.0.1:5000", "https://taskflow-backend-n8df.onrender.com", config.SUPABASE_URL],
             imgSrc: ["'self'", "data:"]
         }
     },
@@ -36,8 +36,8 @@ app.use(helmet({
 // ─── 2. CORS YAPILANDIRMASI ───────────────────────────────────────────────────
 app.use(cors({
     origin: function (origin, callback) {
-        // origin yoksa (örn: mobil uygulama, curl, file:// açılışı) veya listede varsa izin ver
-        if (!origin || config.CORS_ORIGINS.includes(origin) || origin === 'null') {
+        // origin yoksa (örn: mobil uygulama, curl, file:// açılışı) veya izinli ise geçir
+        if (config.isAllowedOrigin(origin)) {
             return callback(null, true);
         }
         return callback(new Error(`CORS ilkesi ihlali: '${origin}' etki alanına izin verilmiyor.`));
@@ -62,8 +62,21 @@ app.use('/api/health', healthRoutes);
 app.use('/auth', authRoutes);
 app.use('/tasks', taskRoutes);
 
+// Frontend Statik Dosyaları Sunma
+const path = require('path');
+const fs = require('fs');
+const frontendDir = path.join(__dirname, '../frontend');
+
+if (fs.existsSync(frontendDir)) {
+    app.use(express.static(frontendDir));
+}
+
 // Kök karşılama
 app.get('/', (req, res) => {
+    const indexPath = path.join(frontendDir, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    }
     res.json({
         name: 'TaskFlow API',
         version: '2.0.0',

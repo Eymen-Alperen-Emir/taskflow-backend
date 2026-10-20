@@ -13,7 +13,7 @@ class TaskController {
     static async getAll(req, res) {
         try {
             const userId = req.user.id;
-            const { status, search, limit = 50, page = 1 } = req.query;
+            const { status, category, search, limit = 50, page = 1 } = req.query;
 
             let query = supabase
                 .from('tasks')
@@ -23,6 +23,11 @@ class TaskController {
             // Durum filtresi
             if (status && ['pending', 'in-progress', 'completed'].includes(status)) {
                 query = query.eq('status', status);
+            }
+
+            // Kategori filtresi
+            if (category && category !== 'all') {
+                query = query.eq('category', category);
             }
 
             // Metin arama (başlık veya açıklama)
@@ -102,11 +107,23 @@ class TaskController {
                 user_id: userId
             };
 
-            const { data, error } = await supabase
+            let { data, error } = await supabase
                 .from('tasks')
                 .insert([taskData])
                 .select()
                 .single();
+
+            // Veritabanında henüz category sütunu yoksa geriye dönük uyumluluk
+            if (error && error.message && error.message.toLowerCase().includes('category')) {
+                delete taskData.category;
+                const retry = await supabase
+                    .from('tasks')
+                    .insert([taskData])
+                    .select()
+                    .single();
+                data = retry.data;
+                error = retry.error;
+            }
 
             if (error) {
                 logError('createTask', error);
@@ -127,14 +144,27 @@ class TaskController {
         try {
             const { id } = req.params;
             const userId = req.user.id;
-            const updates = req.sanitizedUpdates;
+            const updates = { ...req.sanitizedUpdates };
 
-            const { data, error } = await supabase
+            let { data, error } = await supabase
                 .from('tasks')
                 .update(updates)
                 .eq('id', id)
                 .eq('user_id', userId)
                 .select();
+
+            // Veritabanında henüz category sütunu yoksa geriye dönük uyumluluk
+            if (error && error.message && error.message.toLowerCase().includes('category')) {
+                delete updates.category;
+                const retry = await supabase
+                    .from('tasks')
+                    .update(updates)
+                    .eq('id', id)
+                    .eq('user_id', userId)
+                    .select();
+                data = retry.data;
+                error = retry.error;
+            }
 
             if (error) {
                 logError('updateTask', error);

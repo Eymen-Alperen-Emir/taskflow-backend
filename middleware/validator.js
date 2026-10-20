@@ -12,6 +12,29 @@ const {
 
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 const VALID_STATUSES = ['pending', 'in-progress', 'completed'];
+const CATEGORY_MAP = {
+    'personal': 'personal',
+    'kişisel': 'personal',
+    'kisisel': 'personal',
+    'family': 'family',
+    'aile': 'family',
+    'shopping': 'shopping',
+    'market': 'shopping',
+    'alisveris': 'shopping',
+    'alışveriş': 'shopping',
+    'work': 'work',
+    'iş': 'work',
+    'is': 'work',
+    'other': 'other',
+    'diğer': 'other',
+    'diger': 'other'
+};
+
+function normalizeCategory(cat) {
+    if (!cat || typeof cat !== 'string') return 'personal';
+    const key = cat.trim().toLowerCase();
+    return CATEGORY_MAP[key] || 'personal';
+}
 
 function validateRegister(req, res, next) {
     const { email, password } = req.body;
@@ -75,7 +98,7 @@ function validateForgotPassword(req, res, next) {
 }
 
 function validateTaskCreate(req, res, next) {
-    const { title, description, priority, date, status } = req.body;
+    const { title, description, priority, date, status, category } = req.body;
 
     const cleanTitle = sanitizeString(title, 100);
     if (!cleanTitle || cleanTitle.length === 0) {
@@ -85,6 +108,7 @@ function validateTaskCreate(req, res, next) {
     const cleanDesc = description ? sanitizeString(description, 500) : '';
     const cleanPriority = VALID_PRIORITIES.includes(priority) ? priority : 'medium';
     const cleanStatus = VALID_STATUSES.includes(status) ? status : 'pending';
+    const cleanCategory = normalizeCategory(category);
 
     if (date && !isValidDate(date)) {
         return ApiResponse.error(res, 'Geçersiz tarih formatı (YYYY-AA-GG olmalı).', 'INVALID_DATE', 400);
@@ -95,6 +119,7 @@ function validateTaskCreate(req, res, next) {
         description: cleanDesc,
         priority: cleanPriority,
         status: cleanStatus,
+        category: cleanCategory,
         date: date || null
     };
 
@@ -102,7 +127,7 @@ function validateTaskCreate(req, res, next) {
 }
 
 function validateTaskUpdate(req, res, next) {
-    const { title, description, priority, date, status } = req.body;
+    const { title, description, priority, date, status, category } = req.body;
     const updates = {};
 
     if (title !== undefined) {
@@ -129,6 +154,10 @@ function validateTaskUpdate(req, res, next) {
             return ApiResponse.error(res, 'Geçersiz görev durumu.', 'INVALID_STATUS', 400);
         }
         updates.status = status;
+    }
+
+    if (category !== undefined) {
+        updates.category = normalizeCategory(category);
     }
 
     if (date !== undefined) {
