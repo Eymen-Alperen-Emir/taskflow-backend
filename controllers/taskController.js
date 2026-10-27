@@ -18,13 +18,13 @@ class TaskController {
             const userId = req.user.id;
             const { status, category, search, groupId, limit = 50, page = 1 } = req.query;
 
-            let query = supabase
+            let query = db
                 .from('tasks')
                 .select('*', { count: 'exact' });
 
             if (groupId && groupId !== 'all' && groupId !== 'personal') {
                 // Grubun üyesi mi doğrula
-                const { data: member } = await supabase
+                const { data: member } = await db
                     .from('group_members')
                     .select('role')
                     .eq('group_id', groupId)
@@ -58,47 +58,46 @@ class TaskController {
                 }
             }
 
-            // Sayfalama (Pagination - Performans koruması)
-            const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 100);
-            const safePage = Math.max(parseInt(page, 10) || 1, 1);
-            const from = (safePage - 1) * safeLimit;
-            const to = from + safeLimit - 1;
-
+            // Sıralama: Tamamlananlar en altta, sonra son tarihe göre
             query = query
-                .order('created_at', { ascending: false })
-                .range(from, to);
+                .order('completed_at', { ascending: true, nullsFirst: true })
+                .order('created_at', { ascending: false });
 
-            const { data, count, error } = await query;
+            // Sayfalama
+            const pageNum = Math.max(1, parseInt(page, 10) || 1);
+            const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+            const from = (pageNum - 1) * limitNum;
+            const to = from + limitNum - 1;
+
+            query = query.range(from, to);
+
+            const { data, error, count } = await query;
 
             if (error) {
                 logError('getAllTasks', error);
-                return ApiResponse.error(res, 'Görevler getirilirken bir hata oluştu.', 'DATABASE_ERROR', 500);
+                return ApiResponse.error(res, 'Görevler listelenirken bir hata oluştu.', 'DATABASE_ERROR', 500);
             }
 
-            return ApiResponse.success(res, {
-                tasks: data || [],
-                pagination: {
-                    total: count || 0,
-                    page: safePage,
-                    limit: safeLimit,
-                    totalPages: Math.ceil((count || 0) / safeLimit)
-                }
-            }, 'Görevler listelendi.');
+            return ApiResponse.paginated(res, data || [], {
+                page: pageNum,
+                limit: limitNum,
+                total: count || (data ? data.length : 0)
+            }, 'Görevler başarıyla listelendi.');
         } catch (err) {
             logError('getAllTasks:catch', err);
-            return ApiResponse.error(res, 'Görev listesi alınırken sistemsel bir hata oluştu.', 'INTERNAL_ERROR', 500);
+            return ApiResponse.error(res, 'Görevler yüklenemedi.', 'INTERNAL_ERROR', 500);
         }
     }
 
     /**
-     * Tek Bir Görevin Detayı
+     * Tek Bir Görevin Detayını Getir
      */
     static async getOne(req, res) {
         try {
             const { id } = req.params;
             const userId = req.user.id;
 
-            const { data, error } = await supabase
+            const { data, error } = await db
                 .from('tasks')
                 .select('*')
                 .eq('id', id)
@@ -129,7 +128,7 @@ class TaskController {
 
             // Eğer grup görevi olarak ekleniyorsa, kullanıcının gruba üye olduğunu doğrula
             if (taskData.group_id) {
-                const { data: member } = await supabase
+                const { data: member } = await db
                     .from('group_members')
                     .select('role')
                     .eq('group_id', taskData.group_id)
@@ -145,7 +144,7 @@ class TaskController {
                 }
             }
 
-            let { data, error } = await supabase
+            let { data, error } = await db
                 .from('tasks')
                 .insert([taskData])
                 .select()
@@ -154,7 +153,7 @@ class TaskController {
             // Veritabanında henüz category sütunu yoksa geriye dönük uyumluluk
             if (error && error.message && error.message.toLowerCase().includes('category')) {
                 delete taskData.category;
-                const retry = await supabase
+                const retry = await db
                     .from('tasks')
                     .insert([taskData])
                     .select()
@@ -185,7 +184,7 @@ class TaskController {
             const updates = { ...req.sanitizedUpdates };
 
             // 1. Önce güncellenecek görevi bul
-            const { data: existingTask, error: findErr } = await supabase
+            const { data: existingTask, error: findErr } = await db
                 .from('tasks')
                 .select('*')
                 .eq('id', id)
@@ -198,7 +197,7 @@ class TaskController {
             // 2. Yetki Kontrolü
             if (existingTask.group_id) {
                 // Grup görevi: Kullanıcının grupta üye olduğunu doğrula
-                const { data: member } = await supabase
+                const { data: member } = await db
                     .from('group_members')
                     .select('role')
                     .eq('group_id', existingTask.group_id)
@@ -222,7 +221,7 @@ class TaskController {
                 }
             }
 
-            let { data, error } = await supabase
+            let { data, error } = await db
                 .from('tasks')
                 .update(updates)
                 .eq('id', id)
@@ -231,7 +230,7 @@ class TaskController {
             // Veritabanında henüz category sütunu yoksa geriye dönük uyumluluk
             if (error && error.message && error.message.toLowerCase().includes('category')) {
                 delete updates.category;
-                const retry = await supabase
+                const retry = await db
                     .from('tasks')
                     .update(updates)
                     .eq('id', id)
@@ -265,7 +264,7 @@ class TaskController {
             const userId = req.user.id;
 
             // 1. Görevi bul
-            const { data: existingTask, error: findErr } = await supabase
+            const { data: existingTask, error: findErr } = await db
                 .from('tasks')
                 .select('*')
                 .eq('id', id)
@@ -277,7 +276,7 @@ class TaskController {
 
             // 2. Yetki Kontrolü
             if (existingTask.group_id) {
-                const { data: member } = await supabase
+                const { data: member } = await db
                     .from('group_members')
                     .select('role')
                     .eq('group_id', existingTask.group_id)
@@ -298,7 +297,7 @@ class TaskController {
                 }
             }
 
-            const { data, error } = await supabase
+            const { data, error } = await db
                 .from('tasks')
                 .delete()
                 .eq('id', id)

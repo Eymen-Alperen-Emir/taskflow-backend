@@ -15,6 +15,7 @@ router.get('/', GroupController.getMyGroups);
 router.post('/join', GroupController.joinByCode);
 router.get('/:id', GroupController.getGroupDetails);
 router.post('/:id/leave', GroupController.leaveGroup);
+router.patch('/:id/members/:userId/role', GroupController.updateMemberRole);
 router.delete('/:id/members/:userId', GroupController.kickMember);
 router.delete('/:id', GroupController.deleteGroup);
 

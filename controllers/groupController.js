@@ -43,7 +43,7 @@ class GroupController {
 
             // Benzersiz kod garantisi
             while (attempts < 5) {
-                const { data: existing } = await supabase
+                const { data: existing } = await db
                     .from('groups')
                     .select('id')
                     .eq('invite_code', inviteCode)
@@ -55,7 +55,7 @@ class GroupController {
             }
 
             // 1. Grubu oluştur
-            const { data: newGroup, error: groupErr } = await supabase
+            const { data: newGroup, error: groupErr } = await db
                 .from('groups')
                 .insert([{
                     name: cleanName,
@@ -71,7 +71,7 @@ class GroupController {
             }
 
             // 2. Oluşturan kişiyi 'admin' rolüyle üyeliğe ekle
-            const { error: memberErr } = await supabase
+            const { error: memberErr } = await db
                 .from('group_members')
                 .insert([{
                     group_id: newGroup.id,
@@ -105,7 +105,7 @@ class GroupController {
             const userId = req.user.id;
 
             // Kullanıcının üyeliklerini al
-            const { data: memberships, error: memberErr } = await supabase
+            const { data: memberships, error: memberErr } = await db
                 .from('group_members')
                 .select('group_id, role, joined_at')
                 .eq('user_id', userId);
@@ -122,7 +122,7 @@ class GroupController {
             const groupIds = memberships.map(m => m.group_id);
 
             // Grupların detaylarını çek
-            const { data: groups, error: groupErr } = await supabase
+            const { data: groups, error: groupErr } = await db
                 .from('groups')
                 .select('*')
                 .in('id', groupIds)
@@ -134,7 +134,7 @@ class GroupController {
             }
 
             // Her grubun toplam üye sayısını çek
-            const { data: allMembers } = await supabase
+            const { data: allMembers } = await db
                 .from('group_members')
                 .select('group_id')
                 .in('group_id', groupIds);
@@ -176,7 +176,7 @@ class GroupController {
             const userId = req.user.id;
 
             // 1. İstek yapan kullanıcının üye olup olmadığını ve rolünü doğrula
-            const { data: myMembership } = await supabase
+            const { data: myMembership } = await db
                 .from('group_members')
                 .select('role')
                 .eq('group_id', id)
@@ -188,7 +188,7 @@ class GroupController {
             }
 
             // 2. Grup bilgilerini al
-            const { data: group, error: groupErr } = await supabase
+            const { data: group, error: groupErr } = await db
                 .from('groups')
                 .select('*')
                 .eq('id', id)
@@ -199,7 +199,7 @@ class GroupController {
             }
 
             // 3. Grup üyelerini al
-            const { data: members, error: memErr } = await supabase
+            const { data: members, error: memErr } = await db
                 .from('group_members')
                 .select('id, user_id, role, joined_at')
                 .eq('group_id', id)
@@ -265,7 +265,7 @@ class GroupController {
             const cleanCode = invite_code.trim().toUpperCase();
 
             // 1. Koda ait grubu bul
-            const { data: group, error: findErr } = await supabase
+            const { data: group, error: findErr } = await db
                 .from('groups')
                 .select('*')
                 .eq('invite_code', cleanCode)
@@ -276,7 +276,7 @@ class GroupController {
             }
 
             // 2. Zaten üye mi kontrol et
-            const { data: existingMember } = await supabase
+            const { data: existingMember } = await db
                 .from('group_members')
                 .select('id, role')
                 .eq('group_id', group.id)
@@ -288,7 +288,7 @@ class GroupController {
             }
 
             // 3. Üye olarak kaydet
-            const { error: joinErr } = await supabase
+            const { error: joinErr } = await db
                 .from('group_members')
                 .insert([{
                     group_id: group.id,
@@ -322,7 +322,7 @@ class GroupController {
             const { id } = req.params;
             const userId = req.user.id;
 
-            const { data: membership } = await supabase
+            const { data: membership } = await db
                 .from('group_members')
                 .select('role')
                 .eq('group_id', id)
@@ -334,7 +334,7 @@ class GroupController {
             }
 
             // Toplam üye sayısını kontrol et
-            const { data: allMembers } = await supabase
+            const { data: allMembers } = await db
                 .from('group_members')
                 .select('user_id, role, joined_at')
                 .eq('group_id', id)
@@ -352,7 +352,7 @@ class GroupController {
                 if (otherAdmins.length === 0) {
                     const nextAdmin = allMembers.find(m => m.user_id !== userId);
                     if (nextAdmin) {
-                        await supabase
+                        await db
                             .from('group_members')
                             .update({ role: 'admin' })
                             .eq('group_id', id)
@@ -362,7 +362,7 @@ class GroupController {
             }
 
             // Üyeliği sil
-            await supabase
+            await db
                 .from('group_members')
                 .delete()
                 .eq('group_id', id)
@@ -372,6 +372,76 @@ class GroupController {
         } catch (err) {
             logError('leaveGroup:catch', err);
             return ApiResponse.error(res, 'Gruptan ayrılırken hata oluştu.', 'INTERNAL_ERROR', 500);
+        }
+    }
+
+    /**
+     * Grup Üyesinin Rolünü Değiştir (Yalnızca Admin)
+     */
+    static async updateMemberRole(req, res) {
+        try {
+            const { id, userId: targetUserId } = req.params;
+            const { role } = req.body;
+            const adminId = req.user.id;
+
+            if (!['admin', 'member'].includes(role)) {
+                return ApiResponse.error(res, 'Geçersiz rol. Rol "admin" veya "member" olmalıdır.', 'INVALID_ROLE', 400);
+            }
+
+            // 1. İstek yapanın grupta admin olduğunu doğrula
+            const { data: adminMembership } = await db
+                .from('group_members')
+                .select('role')
+                .eq('group_id', id)
+                .eq('user_id', adminId)
+                .maybeSingle();
+
+            if (!adminMembership || adminMembership.role !== 'admin') {
+                return ApiResponse.error(res, 'Yetki değiştirmek için grup yöneticisi olmanız gerekir.', 'FORBIDDEN', 403);
+            }
+
+            // 2. Hedef üyenin grupta olduğunu doğrula
+            const { data: targetMembership } = await db
+                .from('group_members')
+                .select('role')
+                .eq('group_id', id)
+                .eq('user_id', targetUserId)
+                .maybeSingle();
+
+            if (!targetMembership) {
+                return ApiResponse.error(res, 'Üye bu grupta bulunamadı.', 'MEMBER_NOT_FOUND', 404);
+            }
+
+            // 3. Eğer admin kendi yetkisini düşürüyorsa, başka admin kalıp kalmadığını denetle
+            if (targetUserId === adminId && role !== 'admin') {
+                const { data: otherAdmins } = await db
+                    .from('group_members')
+                    .select('id')
+                    .eq('group_id', id)
+                    .eq('role', 'admin')
+                    .neq('user_id', adminId);
+
+                if (!otherAdmins || otherAdmins.length === 0) {
+                    return ApiResponse.error(res, 'Gruptaki son yönetici sizsiniz. Kendinizden önce başka bir üyeyi yönetici yapmalısınız.', 'LAST_ADMIN', 400);
+                }
+            }
+
+            // 4. Rolü güncelle
+            const { error: updateErr } = await db
+                .from('group_members')
+                .update({ role })
+                .eq('group_id', id)
+                .eq('user_id', targetUserId);
+
+            if (updateErr) {
+                logError('updateMemberRole', updateErr);
+                return ApiResponse.error(res, 'Üye yetkisi güncellenemedi.', 'DATABASE_ERROR', 500);
+            }
+
+            return ApiResponse.success(res, { role }, 'Üye yetkisi başarıyla güncellendi.');
+        } catch (err) {
+            logError('updateMemberRole:catch', err);
+            return ApiResponse.error(res, 'Yetki güncellenirken bir hata oluştu.', 'INTERNAL_ERROR', 500);
         }
     }
 
@@ -388,7 +458,7 @@ class GroupController {
             }
 
             // İstek yapanın admin olduğunu doğrula
-            const { data: adminMembership } = await supabase
+            const { data: adminMembership } = await db
                 .from('group_members')
                 .select('role')
                 .eq('group_id', id)
@@ -400,7 +470,7 @@ class GroupController {
             }
 
             // Üyeyi sil
-            const { error: kickErr } = await supabase
+            const { error: kickErr } = await db
                 .from('group_members')
                 .delete()
                 .eq('group_id', id)
@@ -427,7 +497,7 @@ class GroupController {
             const userId = req.user.id;
 
             // Admin kontrolü
-            const { data: membership } = await supabase
+            const { data: membership } = await db
                 .from('group_members')
                 .select('role')
                 .eq('group_id', id)
@@ -438,7 +508,7 @@ class GroupController {
                 return ApiResponse.error(res, 'Grubu yalnızca grup yöneticisi silebilir.', 'FORBIDDEN', 403);
             }
 
-            const { error: delErr } = await supabase
+            const { error: delErr } = await db
                 .from('groups')
                 .delete()
                 .eq('id', id);
