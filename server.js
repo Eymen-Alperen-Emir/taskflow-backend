@@ -43,7 +43,7 @@ app.use(cors({
         }
         return callback(new Error(`CORS ilkesi ihlali: '${origin}' etki alanına izin verilmiyor.`));
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token'],
     credentials: true,
     maxAge: 86400 // Preflight önbelleği (24 saat)
